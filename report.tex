@@ -1,0 +1,181 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\title{Bachelor Report 1}
+\author{Paul Ashraf }
+\date{8 March 2020}
+
+\usepackage{natbib}
+\usepackage{graphicx}
+\usepackage{subfig}
+\usepackage{float}
+
+
+\begin{document}
+
+\maketitle
+
+\section{Implementation}
+\subsection{Dataset Description}
+ The first step in our project was to build a model based on the dataset of this paper. 
+ \newline
+ The dataset contains 45 minutes recordings of 18 test subjects that consists of 62 electrodes as well as data for when the lead car beaks and presses the gas, as well as when the test subject brakes or presses the gas. It also contains the distance between the test subject and the lead car and also the x and y coordinates of the test subject's steering wheel.
+ \newline
+ For the purposes of the work done so far we only used the data for 14 electrodes, which are the 14 electrodes available on the emotive headset. As well as that data for the lead car's brakes. You will find them detailed in the table below.
+ \newline\newline
+ 
+ 
+ \begin{center}
+ \begin{tabular}{|c c|} 
+ \hline
+ Electrode Name & Number \\ 
+ \hline\hline
+ AF3 & 3 \\ 
+ \hline
+ AF4 & 4 \\
+ \hline
+ F7 & 6 \\
+ \hline
+ F3 & 8 \\
+ \hline
+ F4 & 12 \\
+ \hline
+ F8 & 14 \\
+ \hline
+ FC5 & 16 \\
+ \hline
+ FC6 & 22 \\
+ \hline
+ T7 & 24 \\
+ \hline
+ P7 & 43 \\
+ \hline
+ P8 & 51 \\
+ \hline
+  O1 & 58 \\
+ \hline
+  O2 & 60 \\
+ \hline
+ Lead brake & 63 \\
+ \hline
+\end{tabular}
+\end{center}
+
+\subsection{Picturing the Pattern}
+The first step was to try and see how the data behaves on average, to see the pattern with our own eyes. So we took the average of of the 1.5 secs after the lead car brakes for all the times the lead car did brake. This gave us 227 (number of brakes) sets of 300 samples, as the sampling rate is 200 Hz. We also applied a rolling mean filter to get a clearer picture of the pattern
+
+\begin{center}
+\begin{figure}[H]
+\centering
+\includegraphics[scale=0.5]{p7avg.png}
+\caption{P7 Average Reaction}
+\label{fig:p7avg}
+\end{figure}
+\end{center}
+
+As you can see a clear pattern emerges! A sin wave-like behaviour appears to happen at the first 150 samples (750 ms) ranging from 28 \(\mu V\)  to  \(36 \mu V\).
+The rest 150 samples (750 ms) appears to level off at 29 \(\mu V\).
+\newline
+The same exact pattern also appeared for P8.
+
+\begin{center}
+\begin{figure}[H]
+\centering
+\includegraphics[scale=0.5]{p8avg.png}
+\caption{P8 Average Reaction}
+\label{fig:p8avg}
+\end{figure}
+\end{center}
+
+We noticed that signal peaked during roughly the 125th sample. This leaded us to think about designing a simple classifier that takes the values of the 125th sample at P8 and P7 as the emergency braking class, and takes the values of the 200th sample at P8 and P7 as the non-emergency class.
+
+\subsection{Simple Classifier}
+
+This approach would simplify our mission greatly, however it did not work as intended. If we drew a simple scatter plot we can see how it fails.
+
+\begin{figure}[H]
+    \centering
+    \subfloat[The 2 classes]{{\includegraphics[width=5cm]{p7p82.png} }}%
+    \qquad
+    \subfloat[Close up on the mean values]{{\includegraphics[width=5cm]{closeup.png} }}%
+    \caption{P7 and P8 cluster}%
+    \label{fig:example}
+\end{figure}
+
+
+As it is apparent here, the two classes seem identical, and cannot be easily separated. This seemed strange at first as the average values of P7 and P8 (Fig. 1 and Fig. 2) show a clear pattern that can be separated if we look at the 125th and 200th value. However, upon closer look we discovered that this only happens if we average out the whole 227 set of braking events. 
+\newline 
+This is illustrated by the two crosses representing the mean value of the braking class (black) and the mean of value of the non-braking class (green) in Fig. 3 (b). as they do actually have the expected values of \(36 \mu V\) for the braking and 28 \(\mu V\) for the non-braking. We conclude that this method is not valid and we must consider the whole 14 electrodes values. For now we will only look at the window of 1.5 secs (300 samples), later we will try to decrease the window, to improve the response rate of our model. After all, our whole goal is to be faster than the human reaction time. 
+
+\subsection{Proper Classifier}
+
+since our simple approach failed, we ha to design a proper classifier. We used \texttt{sci-kit learn} Python library to train our classifier, trying out various number of classifier. We used 20\% of our 445 data set as a test set. 
+\newline
+The table below summarises the accuracy results after averaging across all test subjects. We ran the model on 7 classifiers and the results we got were not satisfactory, this is due to the high number of features and relatively low number of samples. We have 4200 feature which are the 300 samples form each of the 14 electrodes, and 454 samples. The Linear SVC and LR were the best performing models, being trailed closely by LDA and then K Closest Neighbour. Naive Gaussian and Decision Tree classifiers performed poorly, so we discarded them from our future testing.
+
+\begin{center}
+ \begin{tabular}{|c | c | c | c | c | c | c|} 
+ \hline
+ Gausian & SVC & Linear SVC & LDA & K Neighbour & DTC & LR \\
+ \hline
+62\% & 78\% & 83\% & 82\% & 75\% & 69\% & 83\% \\ 
+ \hline
+\end{tabular}
+\end{center}
+
+If we had to improve the accuracy, we had to do something to manage the high number of features. The solution was to use Principal Component Analysis (PCA) on the data.
+
+\subsubsection{PCA}
+
+At first we used the \texttt{auto} parameter of the PCA function provided by \texttt{sci-kit} and the results were slightly better but not satisfactory. 
+
+\begin{center}
+ \begin{tabular}{|c | c | c | c | c |} 
+ \hline
+ SVC & Linear SVC & LDA & K Neighbour & LR \\
+ \hline
+79\% & 85\% & 56\% & 70\% & 86\% \\ 
+ \hline
+\end{tabular}
+\end{center}
+
+We had to determine the parameter \texttt{n components} that would give us the best results. So we ran the five models for 454 times varying \texttt{n components} from 1 to 454. 
+
+\begin{center}
+\begin{figure}[H]
+\centering
+\includegraphics[width=13cm]{Figure_2.png}
+\caption{PCA performance}
+\label{fig:pca}
+\end{figure}
+\end{center}
+
+We can make a lot of observations right away. Namely, that LDA deteriorates severely after \texttt{n components} goes beyond 250, also Linear SVC functions poorly if \texttt{n components} is below 50.
+\newline
+There standout results like:
+
+\begin{center}
+ \begin{tabular}{|c | c | c |} 
+ \hline
+ \textbf{Model} & \textbf{\texttt{n components}} & \textbf{Accuracy}\\
+ \hline
+LDA & 85 & 91\%  \\ 
+ \hline
+ Linear SVC & 159 & 90\%  \\ 
+ \hline
+  Linear SVC & 186 & 90\%  \\ 
+ \hline
+  Linear SVC & 209 & 91\%  \\ 
+ \hline
+ LR & 209 & 91\%  \\ 
+ \hline
+ LR & 224 & 90\%  \\ 
+ \hline
+\end{tabular}
+\end{center}
+
+
+
+\bibliographystyle{plain}
+\bibliography{references}
+\end{document}
